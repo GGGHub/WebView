@@ -5,7 +5,7 @@
 ---
 
 统一了部分方法，所有可使用的方法与代理回调参考`JHWebViewProtocol`协议</br>
-`JHWebViewProtocol`协议里没有声明的方法暂时不能使用使用
+`JHWebViewProtocol`协议里没有声明的方法暂时不能使用
 
 目前支持的方法
 
@@ -37,4 +37,20 @@
 - (void)jh_webViewDidFinishLoad:(id<JHWebViewProtocol>)webView;
 - (void)jh_webView:(id<JHWebViewProtocol>)webView didFailLoadWithError:(NSError *)error;
 @end
+```
+
+相关`WebView`的属性设置支持
+
+``` objc
+@property (nonatomic) BOOL allowsInlineMediaPlayback; // iPhone Safari defaults to NO. iPad Safari defaults to YES
+@property (nonatomic) BOOL mediaPlaybackRequiresUserAction; // iPhone and iPad Safari both default to YES
+@property (nonatomic) BOOL mediaPlaybackAllowsAirPlay; // iPhone and iPad Safari both default to YES
+@property (nonatomic) BOOL suppressesIncrementalRendering; // iPhone and iPad Safari both default to NO
+@property (nonatomic) BOOL scalesPageToFit;
+```
+
+## 使用
+与`WKWebView`初始化方法相似
+``` objc
++(JHWebView *)webViewWithFrame:(CGRect)frame configuration:(JHWebViewConfiguration *)configuration;
 ```
