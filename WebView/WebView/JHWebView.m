@@ -21,11 +21,20 @@
 
 @end
 
+@interface JHWebViewJS : NSObject
++(NSString *)scalesPageToFitJS;
++(NSString *)imgsElement;
+@end
 @interface JHWebView () <WKNavigationDelegate,UIWebViewDelegate,NJKWebViewProgressDelegate>
 @property (nonatomic,strong) id<JHWebViewProtocol>webView;
 @property (nonatomic,copy) NSString *title;
 @property (nonatomic,assign) double estimatedProgress;
+@property (nonatomic,assign) float pageHeight;
 @property (nonatomic,copy) NJKWebViewProgress *webViewProgress;
+@property (nonatomic,strong) UIActivityIndicatorView *indicatorView;
+@property (nonatomic,strong) JHWebViewConfiguration *configuration;
+@property (nonatomic,copy) NSArray *images;
+
 @end
 @implementation JHWebView
 +(JHWebView *)webViewWithFrame:(CGRect)frame configuration:(JHWebViewConfiguration *)configuration
@@ -36,6 +45,7 @@
 {
     self = [super initWithFrame:frame];
     if (self) {
+        _configuration = configuration;
         if (isCanWebKit) {
             if (configuration) {
                 WKWebViewConfiguration *webViewconfiguration = [[WKWebViewConfiguration alloc] init];
@@ -43,14 +53,21 @@
                 webViewconfiguration.mediaPlaybackRequiresUserAction = configuration.mediaPlaybackRequiresUserAction;
                 webViewconfiguration.mediaPlaybackAllowsAirPlay = configuration.mediaPlaybackAllowsAirPlay;
                 webViewconfiguration.suppressesIncrementalRendering = configuration.suppressesIncrementalRendering;
+                WKUserContentController *wkUController = [[WKUserContentController alloc] init];
                 if (!configuration.scalesPageToFit) {
-                    NSString *jScript = @"var meta = document.createElement('meta'); meta.setAttribute('name', 'viewport'); meta.setAttribute('content', 'width=device-width'); document.getElementsByTagName('head')[0].appendChild(meta);";
-                    
+                    NSString *jScript = [JHWebViewJS scalesPageToFitJS];
                     WKUserScript *wkUScript = [[WKUserScript alloc] initWithSource:jScript injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
-                    WKUserContentController *wkUController = [[WKUserContentController alloc] init];
                     [wkUController addUserScript:wkUScript];
-                    webViewconfiguration.userContentController = wkUController;
+                    WKUserScript *wkScript1 = [[WKUserScript alloc] initWithSource:[JHWebViewJS imgsElement] injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
+                    [wkUController addUserScript:wkScript1];
                 }
+                if (configuration.captureImage) {
+                    NSString *jScript = [JHWebViewJS imgsElement];
+                    WKUserScript *wkUScript = [[WKUserScript alloc] initWithSource:jScript injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
+                    [wkUController addUserScript:wkUScript];
+                    
+                }
+                webViewconfiguration.userContentController = wkUController;
                 _webView = (id)[[JHWKWebView alloc] initWithFrame:CGRectMake(0, 0, frame.size.width, frame.size.height) configuration:webViewconfiguration];
                 
             }
@@ -76,6 +93,9 @@
             _webViewProgress.webViewProxyDelegate = self;
             _webViewProgress.progressDelegate = self;
             
+        }
+        if (configuration.loadingHUD) {
+            [(UIView *)_webView addSubview:self.indicatorView];
         }
         [(UIView *)_webView setBackgroundColor:[UIColor clearColor]];
         [self addSubview:(UIView *)_webView];
@@ -159,24 +179,41 @@
 
 - (void)webView:(WKWebView *)webView didStartProvisionalNavigation:(null_unspecified WKNavigation *)navigation
 {
+    [_indicatorView startAnimating];
     if ([self.delegate respondsToSelector:@selector(jh_webViewDidStartLoad:)]) {
         [self.delegate jh_webViewDidStartLoad:(JHWebView<JHWebViewProtocol>*)self];
     }
 }
 - (void)webView:(WKWebView *)webView didFinishNavigation:(null_unspecified WKNavigation *)navigation
 {
+    [_indicatorView stopAnimating];
     if ([self.delegate respondsToSelector:@selector(jh_webViewDidFinishLoad:)]) {
         [self.delegate jh_webViewDidFinishLoad:(JHWebView<JHWebViewProtocol>*)self];
     }
+    [self jh_evaluateJavaScript:@"document.body.scrollHeight" completionHandler:^(id heitht, NSError *error) {
+        if (!error) {
+            self.pageHeight = [heitht floatValue];
+        }
+    }];
+    if (_configuration.captureImage) {
+        [self jh_evaluateJavaScript:@"imgsElement()" completionHandler:^(NSString * imgs, NSError *error) {
+            if (!error && imgs.length) {
+                _images = [imgs componentsSeparatedByString:@","];
+            }
+        }];
+    }
+    
 }
 - (void)webView:(WKWebView *)webView didFailNavigation:(null_unspecified WKNavigation *)navigation withError:(NSError *)error
 {
+    [_indicatorView stopAnimating];
     if ([self.delegate respondsToSelector:@selector(jh_webViewDidFinishLoad:)]) {
         [self.delegate jh_webView:(JHWebView<JHWebViewProtocol>*)self didFailLoadWithError:error];
     }
 }
 - (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(null_unspecified WKNavigation *)navigation withError:(NSError *)error
 {
+    [_indicatorView stopAnimating];
     if ([self.delegate respondsToSelector:@selector(jh_webView:didFailLoadWithError:)]) {
         [self.delegate jh_webView:(JHWebView<JHWebViewProtocol>*)self didFailLoadWithError:error];
     }
@@ -184,6 +221,7 @@
 #pragma mark - UIWebView Delegate
 - (BOOL)webView:(UIWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType
 {
+    
     BOOL isLoad = YES;
     if ([self.delegate respondsToSelector:@selector(jh_webView:shouldStartLoadWithRequest:navigationType:)]) {
         isLoad = [self.delegate jh_webView:(JHWebView<JHWebViewProtocol>*)self shouldStartLoadWithRequest:request navigationType:[self navigationTypeConvert:navigationType]];
@@ -192,22 +230,47 @@
 }
 - (void)webViewDidStartLoad:(UIWebView *)webView
 {
+    [_indicatorView startAnimating];
     if ([self.delegate respondsToSelector:@selector(jh_webViewDidStartLoad:)]) {
         [self.delegate jh_webViewDidStartLoad:(JHWebView<JHWebViewProtocol>*)self];
     }
 }
 - (void)webViewDidFinishLoad:(UIWebView *)webView
 {
+    [_indicatorView stopAnimating];
     self.title = [webView stringByEvaluatingJavaScriptFromString:@"document.title"];
     if ([self.delegate respondsToSelector:@selector(jh_webViewDidFinishLoad:)]) {
         [self.delegate jh_webViewDidFinishLoad:(JHWebView<JHWebViewProtocol> *)self];
     }
+    [self jh_evaluateJavaScript:@"document.body.scrollHeight" completionHandler:^(id heitht, NSError *error) {
+        if (!error) {
+            self.pageHeight = [heitht floatValue];
+        }
+    }];
+    if (_configuration.captureImage) {
+        [self jh_evaluateJavaScript:[JHWebViewJS imgsElement] completionHandler:nil];
+        [self jh_evaluateJavaScript:@"imgsElement()" completionHandler:^(NSString * imgs, NSError *error) {
+            if (!error && imgs.length) {
+                _images = [imgs componentsSeparatedByString:@","];
+            }
+        }];
+    }
 }
 - (void)webView:(UIWebView *)webView didFailLoadWithError:(NSError *)error
 {
+    [_indicatorView stopAnimating];
     if ([self.delegate respondsToSelector:@selector(jh_webView:didFailLoadWithError:)]) {
         [self.delegate jh_webView:(JHWebView<JHWebViewProtocol>*)self didFailLoadWithError:error];
     }
+}
+#pragma mark - Init
+-(UIActivityIndicatorView *)indicatorView
+{
+    if (!_indicatorView) {
+        _indicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
+        _indicatorView.hidesWhenStopped = YES;
+    }
+    return _indicatorView;
 }
 
 #pragma mark -Privity
@@ -269,7 +332,15 @@
 }
 -(void)layoutSubviews
 {
+    [super layoutSubviews];
     [(UIView *)_webView setFrame:CGRectMake(0, 0, self.frame.size.width, self.frame.size.height)];
+    _indicatorView.frame = CGRectMake(0, 0, 20, 20);
+    _indicatorView.center = CGPointMake(self.frame.size.width/2, self.frame.size.height/2);
+}
+-(void)setNeedsLayout
+{
+    [super setNeedsLayout];
+    [(UIView *)_webView setNeedsLayout];
 }
 -(void)dealloc
 {
@@ -311,3 +382,36 @@
     return self;
 }
 @end
+
+@implementation JHWebViewJS
++(NSString *)scalesPageToFitJS
+{
+    return @"var meta = document.createElement('meta'); \
+    meta.name = 'viewport'; \
+    meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'; \
+    var head = document.getElementsByTagName('head')[0];\
+    head.appendChild(meta);";
+}
++(NSString *)imgsElement
+{
+    return @"function imgsElement(){\
+    var imgs = document.getElementsByTagName(\"img\");\
+    var imgScr = '';\
+    for(var i=0;i<imgs.length;i++){\
+    imgs[i].onclick=function(){\
+    document.location='img'+this.src;\
+    };\
+    if(i == imgs.length-1){\
+    imgScr = imgScr + imgs[i].src;\
+    break;\
+    }\
+    imgScr = imgScr + imgs[i].src + ',';\
+    };\
+    return imgScr;\
+    };";
+}
+
+@end
+
+
+

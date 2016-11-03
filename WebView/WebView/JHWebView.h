@@ -26,6 +26,9 @@ typedef NS_ENUM(NSInteger,JHWebViewNavigationType) {
 @property (nonatomic, readonly, copy) NSString *title;
 // use KVO
 @property (nonatomic, readonly) double estimatedProgress;
+// use KVO
+@property (nonatomic, readonly) float pageHeight;
+@property (nonatomic, readonly, copy) NSArray * images;  // webview's images when captureImage is NO images = nil
 - (void)loadRequest:(NSURLRequest *)request;
 - (void)loadHTMLString:(NSString *)string baseURL:(NSURL *)baseURL;
 - (void)reload;
@@ -33,7 +36,6 @@ typedef NS_ENUM(NSInteger,JHWebViewNavigationType) {
 - (void)goBack;
 - (void)goForward;
 - (void)jh_evaluateJavaScript:(NSString*)javaScriptString completionHandler:(void (^)(id, NSError*))completionHandler;
-
 @end
 
 @protocol JHWebViewDelegate <NSObject>
@@ -50,6 +52,8 @@ typedef NS_ENUM(NSInteger,JHWebViewNavigationType) {
 @property (nonatomic) BOOL mediaPlaybackAllowsAirPlay; // iPhone and iPad Safari both default to YES
 @property (nonatomic) BOOL suppressesIncrementalRendering; // iPhone and iPad Safari both default to NO
 @property (nonatomic) BOOL scalesPageToFit;
+@property (nonatomic) BOOL loadingHUD;          //default NO ,if YES webview will add HUD when loading
+@property (nonatomic) BOOL captureImage;        //default NO ,if YES webview will capture all image in content;
 @end
 
 @interface JHWebView : UIView <JHWebViewProtocol>
